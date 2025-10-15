@@ -27,12 +27,12 @@ const PRODUCTION_URL = 'https://product-db.azurewebsites.net';
 
 // 1. Configure CORS
 // Only allow requests from the production URL
-app.use(cors({ 
-    origin: PRODUCTION_URL, 
-    // You may also need to set credentials: true if your frontend sends cookies/auth headers
-    // credentials: true, 
+app.use(cors({
+  origin: 'https://product-db.azurewebsites.net',  // frontend domain
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
-
 app.use(express.json({ limit: '10mb' })); 
 
 // 2. CRITICAL FIX: Add headers to allow file content to be viewed in an iframe 
