@@ -7,10 +7,7 @@ const pool = new Pool({
     host: 'avo-adb-002.postgres.database.azure.com',
     database: 'RFQ_DATA',
     password: 'St$@0987',
-    port: 5432,
-    ssl: {
-        rejectUnauthorized: false
-    }
+    port: 5432
 });
 
 module.exports = pool;
