@@ -22,33 +22,39 @@ const fileController = require('./controllers/fileController');
 const app = express();
 
 // --- 3. MIDDLEWARE ---
-app.use(cors({ origin: 'http://localhost:3000' }));
+// Define the single allowed production origin (must use HTTPS)
+const PRODUCTION_URL = 'https://product-db.azurewebsites.net';
+
+// 1. Configure CORS
+// Only allow requests from the production URL
+app.use(cors({ 
+    origin: PRODUCTION_URL, 
+    // You may also need to set credentials: true if your frontend sends cookies/auth headers
+    // credentials: true, 
+}));
+
 app.use(express.json({ limit: '10mb' })); 
 
-// CRITICAL FIX: Add headers to allow file content to be viewed in an iframe 
+// 2. CRITICAL FIX: Add headers to allow file content to be viewed in an iframe 
 app.use((req, res, next) => {
     // 1. Remove X-Frame-Options to allow framing
     res.removeHeader('X-Frame-Options'); 
     
     // 2. Set Content-Security-Policy header to allow content in iframes.
-    res.setHeader('Content-Security-Policy', "frame-ancestors 'self' http://localhost:*");
+    // Frame-ancestors is restricted to 'self' (the API domain) and the PRODUCTION_URL
+    res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${PRODUCTION_URL}`);
     next();
 });
 
-// NEW & CRITICAL: Serve static files with correct MIME types for the Google Viewer
+// 3. Serve static files with correct MIME types for the Google Viewer
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
-    // This function runs for every static file being served
     setHeaders: (res, filePath, stat) => {
-        // ❌ ERROR WAS HERE: You called mime.getType(), which is not a function on mime-types.
-        // ✅ FIX: Use mime.lookup() instead.
         const mimeType = mime.lookup(filePath); 
         if (mimeType) {
-            // Set the correct MIME type based on file extension (e.g., application/vnd.openxmlformats-officedocument.spreadsheetml.sheet)
             res.setHeader('Content-Type', mimeType);
         }
     }
 }));
-
 
 // --- 4. ROUTES ---
 app.get('/', (req, res) => {
