@@ -25,13 +25,26 @@ const app = express();
 // Define the single allowed production origin (must use HTTPS)
 const PRODUCTION_URL = 'https://product-db.azurewebsites.net';
 
-// 1. Configure CORS
-// Only allow requests from the production URL
-app.use(cors({ 
-    origin: ALLOWED_ORIGIN, 
-    // You may also need to set credentials: true if your frontend sends cookies/auth headers
-    // credentials: true, 
+app.use(cors({
+  origin: PRODUCTION_URL,  // frontend domain
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
+ 
+// Ensure Express responds to any preflight before other middleware kicks in
+app.options('*', cors({
+  origin: PRODUCTION_URL,
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+  // credentials: true,
+}));
+
+// If some upstream later returns 405 to OPTIONS, this belt-and-suspenders handler prevents it:
+app.use((req, res, next) => {
+   if (req.method === 'OPTIONS') return res.sendStatus(204);
+   next();
+ });
 app.use(express.json({ limit: '10mb' })); 
 
 // 2. CRITICAL FIX: Add headers to allow file content to be viewed in an iframe 
