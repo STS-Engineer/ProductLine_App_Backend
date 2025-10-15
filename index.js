@@ -27,11 +27,10 @@ const PRODUCTION_URL = 'https://product-db.azurewebsites.net';
 
 // 1. Configure CORS
 // Only allow requests from the production URL
-app.use(cors({
-  origin: 'https://product-db.azurewebsites.net',  // frontend domain
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+app.use(cors({ 
+    origin: ALLOWED_ORIGIN, 
+    // You may also need to set credentials: true if your frontend sends cookies/auth headers
+    // credentials: true, 
 }));
 app.use(express.json({ limit: '10mb' })); 
 
@@ -42,7 +41,7 @@ app.use((req, res, next) => {
     
     // 2. Set Content-Security-Policy header to allow content in iframes.
     // Frame-ancestors is restricted to 'self' (the API domain) and the PRODUCTION_URL
-    res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${PRODUCTION_URL}`);
+    res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${ALLOWED_ORIGIN}`);
     next();
 });
 
