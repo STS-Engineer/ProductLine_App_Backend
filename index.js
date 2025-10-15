@@ -23,28 +23,51 @@ const app = express();
 
 // --- 3. MIDDLEWARE ---
 // Define the single allowed production origin (must use HTTPS)
-const PRODUCTION_URL = 'https://product-db.azurewebsites.net';
+const FRONTEND_URL = 'https://product-db.azurewebsites.net';
 
+// Add logging to verify CORS is working
+console.log('[CORS] Allowing origin:', FRONTEND_URL);
+
+// More permissive CORS configuration
 app.use(cors({
-  origin: PRODUCTION_URL,  // frontend domain
+  origin: function (origin, callback) {
+    console.log('[CORS] Request from origin:', origin);
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    
+    // Allow your frontend
+    if (origin === FRONTEND_URL) {
+      return callback(null, true);
+    }
+    
+    console.log('[CORS] Origin blocked:', origin);
+    callback(new Error('Not allowed by CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  credentials: true,
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 }));
  
 // Ensure Express responds to any preflight before other middleware kicks in
-app.options('*', cors({
-  origin: PRODUCTION_URL,
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization'],
-  // credentials: true,
-}));
+app.options('*', (req, res) => {
+  console.log('[OPTIONS] Preflight request from:', req.headers.origin);
+  res.header('Access-Control-Allow-Origin', FRONTEND_URL);
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 // If some upstream later returns 405 to OPTIONS, this belt-and-suspenders handler prevents it:
 app.use((req, res, next) => {
-   if (req.method === 'OPTIONS') return res.sendStatus(204);
+   if (req.method === 'OPTIONS') {
+     console.log('[OPTIONS] Caught by fallback handler');
+     return res.sendStatus(204);
+   }
    next();
- });
+});
+
 app.use(express.json({ limit: '10mb' })); 
 
 // 2. CRITICAL FIX: Add headers to allow file content to be viewed in an iframe 
@@ -53,8 +76,7 @@ app.use((req, res, next) => {
     res.removeHeader('X-Frame-Options'); 
     
     // 2. Set Content-Security-Policy header to allow content in iframes.
-    // Frame-ancestors is restricted to 'self' (the API domain) and the PRODUCTION_URL
-    res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${PRODUCTION_URL}`);
+    res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${FRONTEND_URL}`);
     next();
 });
 
