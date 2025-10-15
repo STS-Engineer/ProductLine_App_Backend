@@ -54,7 +54,7 @@ app.use((req, res, next) => {
     
     // 2. Set Content-Security-Policy header to allow content in iframes.
     // Frame-ancestors is restricted to 'self' (the API domain) and the PRODUCTION_URL
-    res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${ALLOWED_ORIGIN}`);
+    res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${PRODUCTION_URL}`);
     next();
 });
 
