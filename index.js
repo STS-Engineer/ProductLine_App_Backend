@@ -79,7 +79,7 @@ app.use((req, res, next) => {
     res.removeHeader('X-Frame-Options'); 
     
     // 2. Set Content-Security-Policy header to allow content in iframes.
-    res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${FRONTEND_URL}`);
+    res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${FRONTEND_URL} https://docs.google.com`);
     next();
 });
 
