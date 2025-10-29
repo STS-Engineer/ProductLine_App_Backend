@@ -53,7 +53,9 @@ app.use(cors({
 // Ensure Express responds to any preflight before other middleware kicks in
 app.options('*', (req, res) => {
   console.log('[OPTIONS] Preflight request from:', req.headers.origin);
-  res.header('Access-Control-Allow-Origin', FRONTEND_URL);
+  if (allowedOrigins.includes(req.headers.origin)) {
+    res.header('Access-Control-Allow-Origin', req.headers.origin);
+  }
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
