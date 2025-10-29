@@ -25,7 +25,7 @@ const app = express();
 // --- 3. MIDDLEWARE ---
 // Define the single allowed production origin (must use HTTPS)
 const FRONTEND_URL = 'https://product-db.azurewebsites.net';
-
+const allowedOrigins = [FRONTEND_URL, 'https://docs.google.com'];
 // Add logging to verify CORS is working
 console.log('[CORS] Allowing origin:', FRONTEND_URL);
 
@@ -37,7 +37,7 @@ app.use(cors({
     if (!origin) return callback(null, true);
     
     // Allow your frontend
-    if (origin === FRONTEND_URL) {
+    if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     
