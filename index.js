@@ -7,6 +7,7 @@ const mime = require('mime-types'); // ✅ CORRECT: Imported 'mime-types'
 // Load environment variables (must be first)
 dotenv.config();
 
+
 // Ensure DB connection is initiated (though it runs on require)
 require('./config/db');
 
