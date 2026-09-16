@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
+const logger = require('../config/logger');
 
-// Hardcoded JWT Secret (Copied from .env)
-const JWT_SECRET_HARDCODED = 'YOUR_COMPLEX_JWT_SECRET_HERE_A8G9F2J3L4K5P6'; 
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const authenticate = (req, res, next) => {
     // Check for token in Authorization header (Bearer <token>)
@@ -14,20 +14,28 @@ const authenticate = (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     try {
-        // Verify the token using the hardcoded secret
-        const decoded = jwt.verify(token, JWT_SECRET_HARDCODED); // <-- FIX: Replaced process.env.JWT_SECRET
-        
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+
         // Attach user info to the request for controllers
-        req.user = { 
-            id: decoded.id, 
+        req.user = {
+            id: decoded.id,
             email: decoded.email,
-            displayName: decoded.displayName 
+            displayName: decoded.displayName,
+            userRole: decoded.userRole
         };
         next();
     } catch (err) {
-        console.error("JWT Verification failed:", err);
+        logger.warn({ err }, 'JWT verification failed');
         return res.status(401).json({ message: 'Invalid or expired token.' });
     }
 };
 
+const requireAdmin = (req, res, next) => {
+    if (!req.user || req.user.userRole !== 'admin') {
+        return res.status(403).json({ message: 'Admin access required.' });
+    }
+    next();
+};
+
 module.exports = authenticate;
+module.exports.requireAdmin = requireAdmin;

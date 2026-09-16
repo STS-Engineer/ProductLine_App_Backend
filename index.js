@@ -1,12 +1,14 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const path = require('path');
-const mime = require('mime-types'); // ✅ CORRECT: Imported 'mime-types'
+const helmet = require('helmet');
+const multer = require('multer');
+const pinoHttp = require('pino-http');
 
 // Load environment variables (must be first)
 dotenv.config();
 
+const logger = require('./config/logger');
 
 // Ensure DB connection is initiated (though it runs on require)
 require('./config/db');
@@ -14,35 +16,39 @@ require('./config/db');
 // --- 1. CONFIGURATION ---
 const PORT = process.env.PORT || 3001;
 
-// --- 2. IMPORT COMPONENTS ---
-const authenticate = require('./middleware/authMiddleware');
-const authController = require('./controllers/authController');
-const dataController = require('./controllers/dataController'); 
-const fileController = require('./controllers/fileController');
-
+// --- 2. IMPORT ROUTES ---
+const authRoutes = require('./routes/auth.routes');
+const dataRoutes = require('./routes/data.routes');
+const usersRoutes = require('./routes/users.routes');
+const auditRoutes = require('./routes/audit.routes');
+const kpiRoutes = require('./routes/kpi.routes');
 
 const app = express();
 
 // --- 3. MIDDLEWARE ---
+app.use(pinoHttp({ logger }));
+
+// CSP/frameguard disabled here — the iframe-embedding middleware below sets its own
+app.use(helmet({ contentSecurityPolicy: false, frameguard: false }));
+
 // Define the single allowed production origin (must use HTTPS)
 const FRONTEND_URL = 'https://product-db.azurewebsites.net';
-const allowedOrigins = [FRONTEND_URL, 'https://docs.google.com'];
+const allowedOrigins = [FRONTEND_URL, 'https://docs.google.com', 'http://localhost:3000'];
 // Add logging to verify CORS is working
-console.log('[CORS] Allowing origin:', FRONTEND_URL);
+logger.info({ frontendUrl: FRONTEND_URL }, '[CORS] Allowing origin');
 
 // More permissive CORS configuration
 app.use(cors({
   origin: function (origin, callback) {
-    console.log('[CORS] Request from origin:', origin);
     // Allow requests with no origin (like mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
-    
+
     // Allow your frontend
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    
-    console.log('[CORS] Origin blocked:', origin);
+
+    logger.warn({ origin }, '[CORS] Origin blocked');
     callback(new Error('Not allowed by CORS'));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -50,13 +56,12 @@ app.use(cors({
   credentials: true,
   optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 }));
- 
+
 // Ensure Express responds to any preflight before other middleware kicks in
 app.options('*', (req, res) => {
-  console.log('[OPTIONS] Preflight request from:', req.headers.origin);
   if (allowedOrigins.includes(req.headers.origin)) {
-    res.header('Access-Control-Allow-Origin', req.headers.origin);
-  }
+    res.header('Access-Control-Allow-Origin', req.headers.origin);
+  }
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
@@ -66,7 +71,6 @@ app.options('*', (req, res) => {
 // If some upstream later returns 405 to OPTIONS, this belt-and-suspenders handler prevents it:
 app.use((req, res, next) => {
    if (req.method === 'OPTIONS') {
-     console.log('[OPTIONS] Caught by fallback handler');
      return res.sendStatus(204);
    }
    next();
@@ -84,46 +88,29 @@ app.use((req, res, next) => {
     next();
 });
 
-// 3. Serve static files with correct MIME types for the Google Viewer
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
-    setHeaders: (res, filePath, stat) => {
-        const mimeType = mime.lookup(filePath); 
-        if (mimeType) {
-            res.setHeader('Content-Type', mimeType);
-        }
-    }
-}));
-
 // --- 4. ROUTES ---
 app.get('/', (req, res) => {
     res.status(200).send({ message: "Product CRUD API is running and connected to PostgreSQL." });
 });
 
-// --- PUBLIC AUTH ROUTES ---
-app.post('/api/auth/signup', authController.signup);
-app.post('/api/auth/login', authController.login);
-app.post('/api/auth/logout', authenticate, authController.logout);
+app.use('/api/auth', authRoutes);
+app.use('/api/audit_logs', auditRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/kpi', kpiRoutes);
+app.use('/api', dataRoutes);
 
-
-// Logs endpoint (Requires Auth, Read-Only)
-app.get('/api/audit_logs', authenticate, dataController.getAllItems('audit_logs'));
-
-// --- PROTECTED CRUD ROUTES (ALL require authentication) ---
-
-// Product Lines Routes
-app.get('/api/product_lines', authenticate, dataController.getAllItems('product_lines'));
-app.post('/api/product_lines', authenticate, fileController.upload, dataController.createItem('product_lines'));
-app.put('/api/product_lines/:id', authenticate, fileController.upload, dataController.updateItem('product_lines'));
-app.delete('/api/product_lines/:id', authenticate, dataController.deleteItem('product_lines'));
-
-// Products Routes
-app.get('/api/products', authenticate, dataController.getAllItems('products'));
-app.post('/api/products', authenticate, fileController.upload, dataController.createItem('products'));
-app.put('/api/products/:id', authenticate, fileController.upload, dataController.updateItem('products'));
-app.delete('/api/products/:id', authenticate, dataController.deleteItem('products'));
-
+// Centralized error handler — catches multer/file-filter rejections and anything else
+// passed via next(err) that a route didn't already handle itself.
+app.use((err, req, res, next) => {
+    if (err instanceof multer.MulterError || (err && /file type not allowed|invalid fieldname/i.test(err.message || ''))) {
+        logger.warn({ err }, 'Upload rejected');
+        return res.status(400).json({ message: err.message });
+    }
+    logger.error({ err }, 'Unhandled error');
+    res.status(500).json({ message: 'Internal server error.' });
+});
 
 // --- 5. START SERVER ---
 app.listen(PORT, () => {
-    console.log(`[API] Server listening on http://localhost:${PORT}`);
+    logger.info({ port: PORT }, '[API] Server listening');
 });

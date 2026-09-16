@@ -1,2 +1,13 @@
 # Ignorer le dossier node_modules
 node_modules/
+
+# Env files
+.env
+.env.*.local
+
+# Uploads (migrating to Azure Blob Storage)
+uploads/
+
+# Build artifacts / logs
+build/
+*.log
