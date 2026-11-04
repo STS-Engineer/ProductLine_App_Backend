@@ -7,9 +7,34 @@ const logger = require('../config/logger');
 
 // Shared by createItem and updateItem — prevents arbitrary column writes from request body keys.
 const TABLE_COLUMNS = {
-    products: ['product_name', 'product_line', 'description', 'product_definition', 'operating_environment', 'technical_parameters', 'machines_and_tooling', 'manufacturing_strategy', 'purchasing_strategy', 'prototypes_ppap_and_sop', 'engineering_and_testing', 'capacity', 'our_advantages', 'gmdc_pct', 'product_line_id', 'customers_in_production', 'customer_in_development', 'level_of_interest_and_why', 'estimated_price_per_product', 'prod_if_customer_in_china', 'costing_data', 'product_pictures'],
+    products: ['product_name', 'product_line', 'description', 'product_definition', 'operating_environment', 'technical_parameters', 'machines_and_tooling', 'manufacturing_strategy', 'purchasing_strategy', 'prototypes_ppap_and_sop', 'engineering_and_testing', 'capacity', 'our_advantages', 'gmdc_pct', 'product_line_id', 'customers_in_production', 'customer_in_development', 'level_of_interest_and_why', 'estimated_price_per_product', 'prod_if_customer_in_china', 'costing_data', 'product_pictures', 'applications'],
     product_lines: ['name', 'type_of_products', 'manufacturing_locations', 'design_center', 'product_line_manager', 'history', 'type_of_customers', 'metiers', 'strength', 'weakness', 'perspectives', 'compliance_resource_id', 'attachments_raw'],
     users: ['user_role']
+};
+
+const MAX_PRODUCT_PICTURES = 50;
+
+class ValidationError extends Error {}
+
+// products.applications is a JSON-stringified array of strings. Multipart requests send it as a
+// JSON string, JSON requests as a real array; both are normalized (trimmed, de-duplicated).
+const normalizeApplications = (data) => {
+    if (!('applications' in data)) return;
+    let list = data.applications;
+    if (typeof list === 'string') {
+        try { list = list.trim().startsWith('[') ? JSON.parse(list) : [list]; } catch { list = [list]; }
+    }
+    if (!Array.isArray(list)) list = [];
+    const seen = new Set();
+    const clean = [];
+    for (const item of list) {
+        const value = typeof item === 'string' ? item.trim() : '';
+        if (value && !seen.has(value.toLowerCase())) {
+            seen.add(value.toLowerCase());
+            clean.push(value);
+        }
+    }
+    data.applications = JSON.stringify(clean);
 };
 
 // --- AUDITING FUNCTION (Centralized logging) ---
@@ -104,6 +129,11 @@ exports.createItem = (tableName) => async (req, res) => {
     try {
         await client.query('BEGIN'); // Start transaction
 
+        if (tableName === 'products' && newlyUploadedFiles.length > MAX_PRODUCT_PICTURES) {
+            throw new ValidationError(`A product can have at most ${MAX_PRODUCT_PICTURES} pictures.`);
+        }
+        if (tableName === 'products') normalizeApplications(data);
+
         // --- CRITICAL FIX START: Lookup product_line_id from name for 'products' table ---
         if (tableName === 'products' && data.product_line) {
             const productLineResult = await client.query(
@@ -165,6 +195,10 @@ exports.createItem = (tableName) => async (req, res) => {
         // Handle common PostgreSQL errors (e.g., unique constraint violation)
         if (error.code === '23505') {
             return res.status(409).json({ message: `A record with this unique name/ID already exists.` });
+        }
+
+        if (error instanceof ValidationError) {
+            return res.status(400).json({ message: error.message });
         }
 
         // Return the specific error from the lookup if it exists
@@ -252,6 +286,11 @@ exports.updateItem = (tableName) => async (req, res) => {
                 ? data[fileField].filter(p => typeof p === 'string' && existingDbPaths.includes(p))
                 : existingDbPaths;
         }
+
+        if (tableName === 'products' && finalFilePaths.length > MAX_PRODUCT_PICTURES) {
+            throw new ValidationError(`A product can have at most ${MAX_PRODUCT_PICTURES} pictures.`);
+        }
+        if (tableName === 'products') normalizeApplications(data);
 
         if (fileField) {
             data[fileField] = JSON.stringify(finalFilePaths);
@@ -347,6 +386,10 @@ exports.updateItem = (tableName) => async (req, res) => {
             return res.status(409).json({ message: `A record with this unique name/ID already exists.` });
         }
 
+        if (error instanceof ValidationError) {
+            return res.status(400).json({ message: error.message });
+        }
+
         // Return the specific error from the lookup if it exists
         if (error.message.includes('Product line with name')) {
              return res.status(400).json({ message: error.message });
@@ -355,6 +398,26 @@ exports.updateItem = (tableName) => async (req, res) => {
         res.status(500).json({ message: `Error updating ${tableName}.` });
     } finally {
         client.release();
+    }
+};
+
+// GET /api/products/applications: every distinct application already used on any product,
+// used as the suggestion list for the applications field (fuzzy-matched client side).
+exports.getProductApplications = async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT DISTINCT TRIM(app) AS application
+             FROM products,
+                  jsonb_array_elements_text(
+                      CASE WHEN LEFT(LTRIM(applications), 1) = '[' THEN applications::jsonb ELSE '[]'::jsonb END
+                  ) AS app
+             WHERE TRIM(app) <> ''
+             ORDER BY 1`
+        );
+        res.status(200).json(result.rows.map(r => r.application));
+    } catch (error) {
+        logger.error({ err: error }, 'Error fetching product applications');
+        res.status(500).json({ message: 'Error fetching product applications.' });
     }
 };
 

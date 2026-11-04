@@ -39,7 +39,7 @@ const uploadMiddleware = multer({
         cb(null, true);
     }
 }).fields([
-    { name: 'product_pictures', maxCount: 10 },
+    { name: 'product_pictures', maxCount: 50 },
     { name: 'attachments_raw', maxCount: 10 }
 ]);
 

@@ -14,6 +14,8 @@ function registerCrud(path, tableName) {
     router.delete(`/${path}/:id`, authenticate, requireAdmin, dataController.deleteItem(tableName));
 }
 
+router.get('/products/applications', authenticate, dataController.getProductApplications);
+
 registerCrud('product_lines', 'product_lines');
 registerCrud('products', 'products');
 

@@ -104,6 +104,10 @@ app.use('/api', dataRoutes);
 app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError || (err && /file type not allowed|invalid fieldname/i.test(err.message || ''))) {
         logger.warn({ err }, 'Upload rejected');
+        // multer reports exceeding a field's maxCount as a cryptic "Unexpected field"
+        if (err.code === 'LIMIT_UNEXPECTED_FILE' && err.field === 'product_pictures') {
+            return res.status(400).json({ message: 'A product can have at most 50 pictures.' });
+        }
         return res.status(400).json({ message: err.message });
     }
     logger.error({ err }, 'Unhandled error');

@@ -62,7 +62,7 @@ CREATE TABLE products (
     capacity                      TEXT,
     our_advantages                TEXT,
     gmdc_pct                      NUMERIC,
-    product_pictures              TEXT,  -- JSON-stringified array of Azure Blob Storage URLs
+    product_pictures              TEXT,  -- JSON-stringified array of Azure Blob Storage URLs (max 50)
     product_line_id               BIGINT REFERENCES product_lines(id),
     customers_in_production       TEXT,
     customer_in_development       TEXT,
@@ -70,6 +70,7 @@ CREATE TABLE products (
     estimated_price_per_product   TEXT,
     prod_if_customer_in_china     BOOLEAN,
     costing_data                  TEXT,
+    applications                  TEXT,  -- JSON-stringified array of strings. Added via: ALTER TABLE products ADD COLUMN applications TEXT;
     created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_by                    INTEGER,  -- users.id, no FK constraint defined
     updated_by                    INTEGER,  -- users.id, no FK constraint defined
